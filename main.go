@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -27,7 +28,7 @@ func getHref(t html.Token) (ok bool, href string) {
 }
 
 // Extract links from a Webpage
-func crawl(url string) (urls []string) {
+func crawl(url string) (urls []string, err error) {
 
 	var b io.ReadCloser
 
@@ -36,17 +37,15 @@ func crawl(url string) (urls []string) {
 		resp, err := http.Get(url)
 
 		if err != nil {
-			fmt.Println("ERROR: Failed to crawl:", url)
-			return
+			return urls, err
 		}
 		b = resp.Body
 		defer b.Close()
 	} else {
 		log.Printf("Opening: %s", url)
-		var err error
 		b, err = os.Open(url)
 		if err != nil {
-			log.Fatal(err)
+			return urls, err
 		}
 	}
 
@@ -77,14 +76,22 @@ func crawl(url string) (urls []string) {
 }
 
 func main() {
-	foundUrls := crawl(os.Args[1])
-	fmt.Println("\nFound", len(foundUrls), "unique urls:")
+	foundUrls, err := crawl(os.Args[1])
+	dirPath := path.Dir(os.Args[1])
+	basePath := path.Base(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
 	for _, u := range foundUrls {
-		fmt.Println("Open", u)
-		urls := crawl("test/" + u)
-		fmt.Println("\nFound", len(urls), "unique urls:")
+		log.Println("Crawling", u)
+		urls, err := crawl(path.Join(dirPath, u))
+		if err != nil {
+			log.Printf("Ignoring %v", err)
+			break
+		}
+		fmt.Printf("%s,%s\n", u, basePath)
 		for _, v := range urls {
-			fmt.Printf("%s points to %s", u, v)
+			fmt.Println(v)
 		}
 	}
 
