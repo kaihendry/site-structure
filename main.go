@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -11,6 +12,8 @@ import (
 
 	"golang.org/x/net/html"
 )
+
+var basePath string
 
 // Helper function to pull the href attribute from a Token
 func getHref(t html.Token) (ok bool, href string) {
@@ -76,23 +79,26 @@ func crawl(url string) (urls []string, err error) {
 }
 
 func main() {
-	foundUrls, err := crawl(os.Args[1])
-	dirPath := path.Dir(os.Args[1])
-	basePath := path.Base(os.Args[1])
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, u := range foundUrls {
-		log.Println("Crawling", u)
-		urls, err := crawl(path.Join(dirPath, u))
+	dir := flag.String("base", "", "base path")
+	flag.Parse()
+	basePath = *dir
+	root := flag.Args()[0]
+	log.Println("Starting with", basePath, root)
+	spider([]string{root}, "")
+}
+
+func spider(urls []string, parent string) {
+	log.Printf("Spidering: %v\n", urls)
+	for _, u := range urls {
+		log.Println("Crawling", path.Join(basePath, u))
+		foundUrls, err := crawl(path.Join(basePath, u))
 		if err != nil {
 			log.Printf("Ignoring %v", err)
-			break
+			return
 		}
-		fmt.Printf("%s,%s\n", u, basePath)
-		for _, v := range urls {
-			fmt.Println(v)
+		if parent != "" {
+			fmt.Printf("%s,%s\n", u, parent)
 		}
+		spider(foundUrls, u)
 	}
-
 }
