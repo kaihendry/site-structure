@@ -27,13 +27,9 @@ func getHref(t html.Token) (ok bool, href string) {
 }
 
 // Extract links from a Webpage
-func crawl(url string, ch chan string, chFinished chan bool) {
+func crawl(url string) (urls []string) {
 
 	var b io.ReadCloser
-	defer func() {
-		// Notify that we're done after this function
-		chFinished <- true
-	}()
 
 	if strings.HasPrefix(url, "http") {
 		log.Printf("Fetching: %s", url)
@@ -56,15 +52,10 @@ func crawl(url string, ch chan string, chFinished chan bool) {
 
 	z := html.NewTokenizer(b)
 
-	log.Println("tokenizing")
-
 	for {
 		tt := z.Next()
-
-		log.Println("walking", tt)
 		switch {
 		case tt == html.ErrorToken:
-			log.Println("End of the document, we're done")
 			return
 		case tt == html.StartTagToken:
 			t := z.Token()
@@ -80,44 +71,21 @@ func crawl(url string, ch chan string, chFinished chan bool) {
 			if !ok {
 				continue
 			}
-
-			ch <- url
+			urls = append(urls, url)
 		}
-
 	}
 }
 
 func main() {
-	foundUrls := make(map[string]bool)
-	seedUrls := os.Args[1:]
-
-	// Channels
-	chUrls := make(chan string)
-	chFinished := make(chan bool)
-
-	// Kick off the crawl process (concurrently)
-	for _, url := range seedUrls {
-		go crawl(url, chUrls, chFinished)
-	}
-
-	// Subscribe to both channels
-	for c := 0; c < len(seedUrls); {
-		select {
-		case url := <-chUrls:
-			log.Println("Found", url)
-			foundUrls[url] = true
-		case <-chFinished:
-			c++
+	foundUrls := crawl(os.Args[1])
+	fmt.Println("\nFound", len(foundUrls), "unique urls:")
+	for _, u := range foundUrls {
+		fmt.Println("Open", u)
+		urls := crawl("test/" + u)
+		fmt.Println("\nFound", len(urls), "unique urls:")
+		for _, v := range urls {
+			fmt.Printf("%s points to %s", u, v)
 		}
 	}
 
-	// We're done! Print the results...
-
-	fmt.Println("\nFound", len(foundUrls), "unique urls:")
-
-	for url, _ := range foundUrls {
-		fmt.Println(" - " + url)
-	}
-
-	close(chUrls)
 }
