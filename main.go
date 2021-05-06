@@ -1,11 +1,11 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-var basePath string
+var seen map[string]bool
 
 // Helper function to pull the href attribute from a Token
 func getHref(t html.Token) (ok bool, href string) {
@@ -35,6 +35,11 @@ func crawl(url string) (urls []string, err error) {
 
 	var b io.ReadCloser
 
+	if seen[url] {
+		log.Println("seen", url, "before, not crawling")
+		return
+	}
+
 	if strings.HasPrefix(url, "http") {
 		log.Printf("Fetching: %s", url)
 		resp, err := http.Get(url)
@@ -51,6 +56,9 @@ func crawl(url string) (urls []string, err error) {
 			return urls, err
 		}
 	}
+
+	log.Println("marking", url, "as seen")
+	seen[url] = true
 
 	z := html.NewTokenizer(b)
 
@@ -79,19 +87,31 @@ func crawl(url string) (urls []string, err error) {
 }
 
 func main() {
-	flag.Parse()
-	root := flag.Args()[0]
-	basePath = path.Dir(root)
-	root = path.Base(root)
-	log.Println("Starting with", basePath, root)
+	seen = make(map[string]bool)
+	root := os.Args[1]
+	if root == "" {
+		log.Fatal("Missing argument")
+	}
 	spider([]string{root}, "")
 }
 
 func spider(urls []string, parent string) {
 	log.Printf("Spidering: %v\n", urls)
 	for _, u := range urls {
-		log.Println("Crawling", path.Join(basePath, u))
-		foundUrls, err := crawl(path.Join(basePath, u))
+		if !strings.HasPrefix(u, "http") {
+			basePath := path.Dir(u)
+			if basePath != "" {
+				os.Chdir(basePath)
+			}
+			u = path.Base(u)
+			cwd, err := os.Getwd()
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println("Local crawl", path.Join(cwd, u))
+		}
+
+		foundUrls, err := crawl(u)
 		if err != nil {
 			log.Printf("Ignoring %v", err)
 			return
@@ -99,6 +119,25 @@ func spider(urls []string, parent string) {
 		if parent != "" {
 			fmt.Printf("%s,%s\n", u, parent)
 		}
-		spider(foundUrls, u)
+		log.Println("Found URLs", foundUrls)
+
+		if strings.HasPrefix(u, "http") {
+			var resolvedURLs []string
+			for _, furl := range foundUrls {
+				f, err := url.Parse(furl)
+				if err != nil {
+					log.Fatal(err)
+				}
+				base, err := url.Parse(u)
+				if err != nil {
+					log.Fatal(err)
+				}
+				resolvedURLs = append(resolvedURLs, base.ResolveReference(f).String())
+			}
+			log.Println("http urls to spider", resolvedURLs)
+			spider(resolvedURLs, u)
+		} else {
+			spider(foundUrls, u)
+		}
 	}
 }
