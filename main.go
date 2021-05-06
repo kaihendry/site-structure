@@ -38,8 +38,8 @@ func crawl(url string) (urls []string, err error) {
 	if strings.HasPrefix(url, "http") {
 		log.Printf("Fetching: %s", url)
 		resp, err := http.Get(url)
-
 		if err != nil {
+			log.Println("Failed to fetch", url)
 			return urls, err
 		}
 		b = resp.Body
@@ -79,10 +79,10 @@ func crawl(url string) (urls []string, err error) {
 }
 
 func main() {
-	dir := flag.String("base", "", "base path")
 	flag.Parse()
-	basePath = *dir
 	root := flag.Args()[0]
+	basePath = path.Dir(root)
+	root = path.Base(root)
 	log.Println("Starting with", basePath, root)
 	spider([]string{root}, "")
 }
